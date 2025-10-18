@@ -13,11 +13,11 @@ template <typename RT, typename... Args>
 class Function<RT(Args...)> final
 {
     // Only Nano::Observer is allowed private access
-    template <typename> friend class Observer;
+    template <typename, template <typename> typename> friend class Observer;
 
     using Thunk = RT(*)(void*, Args&&...);
 
-    static inline Function bind(Delegate_Key const& delegate_key)
+    static Function bind(Delegate_Key const& delegate_key) noexcept
     {
         return
         {
@@ -32,7 +32,7 @@ class Function<RT(Args...)> final
     const Thunk function_pointer;
 
     template <auto fun_ptr>
-    static inline Function bind()
+    static Function bind()
     {
         return
         {
@@ -44,7 +44,7 @@ class Function<RT(Args...)> final
     }
 
     template <auto mem_ptr, typename T>
-    static inline Function bind(T* pointer)
+    static Function bind(T* pointer) noexcept
     {
         return
         {
@@ -56,7 +56,7 @@ class Function<RT(Args...)> final
     }
 
     template <typename L>
-    static inline Function bind(L* pointer)
+    static Function bind(L* pointer) noexcept
     {
         return
         {
@@ -68,12 +68,12 @@ class Function<RT(Args...)> final
     }
 
     template <typename... Uref>
-    inline RT operator() (Uref&&... args) const
+    RT operator() (Uref&&... args) const
     {
         return (*function_pointer)(instance_pointer, static_cast<Args&&>(args)...);
     }
 
-    inline operator Delegate_Key() const
+    operator Delegate_Key() const noexcept
     {
         return
         {

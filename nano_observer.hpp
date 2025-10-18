@@ -9,16 +9,16 @@
 namespace Nano
 {
 
-template <typename MT_Policy = ST_Policy>
-class Observer : private MT_Policy
+template <typename MT_Policy = ST_Policy, template <typename> typename Allocator = std::allocator>
+class Observer : MT_Policy
 {
     // Only Nano::Signal is allowed private access
-    template <typename, typename> friend class Signal;
+    template <typename, typename, template <typename> typename> friend class Signal;
 
     struct Connection
     {
         Delegate_Key delegate;
-        typename MT_Policy::Weak_Ptr observer;
+        MT_Policy::Weak_Ptr observer;
 
         Connection() noexcept = default;
         Connection(Delegate_Key const& key) : delegate(key), observer() {}
@@ -27,7 +27,7 @@ class Observer : private MT_Policy
 
     struct Z_Order
     {
-        inline bool operator()(Delegate_Key const& lhs, Delegate_Key const& rhs) const
+        bool operator()(Delegate_Key const& lhs, Delegate_Key const& rhs) const
         {
             std::size_t x = lhs[0] ^ rhs[0];
             std::size_t y = lhs[1] ^ rhs[1];
@@ -35,50 +35,41 @@ class Observer : private MT_Policy
             return lhs[k] < rhs[k];
         }
 
-        inline bool operator()(Connection const& lhs, Connection const& rhs) const
+        bool operator()(Connection const& lhs, Connection const& rhs) const
         {
             return operator()(lhs.delegate, rhs.delegate);
         }
     };
 
-    std::vector<Connection> connections;
+    std::vector<Connection, Allocator<Connection>> connections;
 
     //--------------------------------------------------------------------------
 
     void nolock_insert(Delegate_Key const& key, Observer* obs)
     {
-        auto begin = std::begin(connections);
-        auto end = std::end(connections);
-
-        connections.emplace(std::upper_bound(begin, end, key, Z_Order()), key, obs);
+        connections.emplace(std::upper_bound(std::begin(connections), std::end(connections), key, Z_Order()), key, obs);
     }
 
     void insert(Delegate_Key const& key, Observer* obs)
     {
-        [[maybe_unused]]
-        auto lock = MT_Policy::lock_guard();
+        auto _ = MT_Policy::lock_guard();
 
         nolock_insert(key, obs);
     }
 
     void remove(Delegate_Key const& key) noexcept
     {
-        [[maybe_unused]]
-        auto lock = MT_Policy::lock_guard();
+        auto _ = MT_Policy::lock_guard();
 
-        auto begin = std::begin(connections);
-        auto end = std::end(connections);
-
-        auto slots = std::equal_range(begin, end, key, Z_Order());
+        auto slots = std::equal_range(std::begin(connections), std::end(connections), key, Z_Order());
         connections.erase(slots.first, slots.second);
     }
 
     //--------------------------------------------------------------------------
 
     template <typename Function, typename... Uref>
-    void for_each(Uref&&... args)
+    void for_each(Uref&&... args) const noexcept
     {
-        [[maybe_unused]]
         auto lock = MT_Policy::lock_guard();
 
         for (auto const& slot : MT_Policy::copy_or_ref(connections, lock))
@@ -91,9 +82,8 @@ class Observer : private MT_Policy
     }
 
     template <typename Function, typename Accumulate, typename... Uref>
-    void for_each_accumulate(Accumulate&& accumulate, Uref&&... args)
+    void for_each_accumulate(Accumulate&& accumulate, Uref&&... args) const noexcept
     {
-        [[maybe_unused]]
         auto lock = MT_Policy::lock_guard();
 
         for (auto const& slot : MT_Policy::copy_or_ref(connections, lock))
@@ -123,8 +113,7 @@ class Observer : private MT_Policy
 
     void move_connections_from(Observer* other) noexcept
     {
-        [[maybe_unused]]
-        auto lock = MT_Policy::scoped_lock(other);
+        auto _ = MT_Policy::scoped_lock(other);
 
         // Make sure this is disconnected and ready to receive
         nolock_disconnect_all();
@@ -155,21 +144,26 @@ class Observer : private MT_Policy
 
     void disconnect_all() noexcept
     {
-        [[maybe_unused]]
-        auto lock = MT_Policy::lock_guard();
+        auto _ = MT_Policy::lock_guard();
 
         nolock_disconnect_all();
     }
 
     bool is_empty() const noexcept
     {
-        [[maybe_unused]]
-        auto lock = MT_Policy::lock_guard();
+        auto _ = MT_Policy::lock_guard();
 
         return connections.empty();
     }
 
-    protected:
+    auto size() const noexcept
+    {
+      auto _ = MT_Policy::lock_guard();
+
+      return connections.size();
+    }
+
+protected:
 
     // Guideline #4: A base class destructor should be
     // either public and virtual, or protected and non-virtual.

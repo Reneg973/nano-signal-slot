@@ -6,12 +6,12 @@
 namespace Nano
 {
 
-template <typename RT, typename MT_Policy = ST_Policy>
+template <typename RT, typename MT_Policy = ST_Policy, template <typename> typename Allocator = std::allocator>
 class Signal;
-template <typename RT, typename MT_Policy, typename... Args>
-class Signal<RT(Args...), MT_Policy> final : public Observer<MT_Policy>
+template <typename RT, typename MT_Policy, template <class> class Allocator, typename... Args>
+class Signal<RT(Args...), MT_Policy, Allocator> final : public Observer<MT_Policy, Allocator>
 {
-    using observer = Observer<MT_Policy>;
+    using observer = Observer<MT_Policy, Allocator>;
     using function = Function<RT(Args...)>;
 
     template <typename T>
@@ -53,7 +53,7 @@ class Signal<RT(Args...), MT_Policy> final : public Observer<MT_Policy>
     template <typename L>
     void connect(L* instance)
     {
-        observer::insert(function::template bind(instance), this);
+        observer::insert(function::template bind<>(instance), this);
     }
     template <typename L>
     void connect(L& instance)
@@ -105,7 +105,7 @@ class Signal<RT(Args...), MT_Policy> final : public Observer<MT_Policy>
     template <typename L>
     void disconnect(L* instance)
     {
-        observer::remove(function::template bind(instance));
+        observer::remove(function::template bind<>(instance));
     }
     template <typename L>
     void disconnect(L& instance)
@@ -155,16 +155,22 @@ class Signal<RT(Args...), MT_Policy> final : public Observer<MT_Policy>
     //----------------------------------------------------FIRE / FIRE ACCUMULATE
 
     template <typename... Uref>
-    void fire(Uref&&... args)
+    void fire(Uref&&... args) const
     {
         observer::template for_each<function>(std::forward<Uref>(args)...);
     }
 
     template <typename Accumulate, typename... Uref>
-    void fire_accumulate(Accumulate&& accumulate, Uref&&... args)
+    void fire_accumulate(Accumulate&& accumulate, Uref&&... args) const
     {
         observer::template for_each_accumulate<function, Accumulate>
             (std::forward<Accumulate>(accumulate), std::forward<Uref>(args)...);
+    }
+
+    template <typename... Uref>
+    void operator()(Uref&&... args) const
+    {
+        observer::template for_each<function>(std::forward<Uref>(args)...);
     }
 };
 
