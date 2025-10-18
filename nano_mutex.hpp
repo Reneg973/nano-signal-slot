@@ -12,9 +12,9 @@ class Spin_Mutex final
 {
     std::atomic_bool locked = { false };
 
-    public:
+public:
 
-    inline void lock() noexcept
+    void lock() noexcept
     {
         do
         {
@@ -26,13 +26,12 @@ class Spin_Mutex final
         while (locked.exchange(true, std::memory_order_acquire));
     }
 
-    inline bool try_lock() noexcept
+    bool try_lock() noexcept
     {
-        return !locked.load(std::memory_order_relaxed) &&
-            !locked.exchange(true, std::memory_order_acquire);
+        return !locked.exchange(true, std::memory_order_acquire);
     }
 
-    inline void unlock() noexcept
+    void unlock() noexcept
     {
         locked.store(false, std::memory_order_release);
     }
@@ -66,10 +65,9 @@ class Spin_Mutex final
 /// </summary>
 class ST_Policy
 {
-    public:
-
+public:
     template <typename T, typename L>
-    inline T const& copy_or_ref(T const& param, L&&) const
+    T const& copy_or_ref(T const& param, L&&) const
     {
         // Return a ref of param
         return param;
@@ -85,8 +83,7 @@ class ST_Policy
         return false;
     }
 
-    protected:
-
+protected:
     ST_Policy() noexcept = default;
     ~ST_Policy() noexcept = default;
 
@@ -122,7 +119,6 @@ class ST_Policy
 
     constexpr void before_disconnect_all() const
     {
-
     }
 };
 
@@ -138,22 +134,21 @@ class TS_Policy
 {
     mutable Mutex mutex;
 
-    public:
-
+public:
     template <typename T, typename L>
-    inline T const& copy_or_ref(T const& param, L&&) const
+    T const& copy_or_ref(T const& param, L&&) const
     {
         // Return a ref of param
         return param;
     }
 
-    inline auto lock_guard() const
+    auto lock_guard() const
     {
         // All policies must implement the BasicLockable requirement
         return std::lock_guard<TS_Policy>(*const_cast<TS_Policy*>(this));
     }
 
-    inline auto scoped_lock(TS_Policy* other) const
+    auto scoped_lock(TS_Policy* other) const
     {
         return std::scoped_lock<TS_Policy, TS_Policy>(
             *const_cast<TS_Policy*>(this), *const_cast<TS_Policy*>(other));
@@ -298,44 +293,44 @@ class TS_Policy_Safe
     Shared_Ptr tracker { this, [](...){} };
     mutable Mutex mutex;
 
-    public:
+public:
 
     template <typename T, typename L>
-    inline T copy_or_ref(T const& param, L&& lock) const
+    T copy_or_ref(T const& param, L&& lock) const
     {
         std::unique_lock<TS_Policy_Safe> unlock_after_copy = std::move(lock);
         // Return a copy of param and then unlock the now "sunk" lock
         return param;
     }
 
-    inline auto lock_guard() const
+    auto lock_guard() const
     {
         // Unique_lock must be used in order to "sink" the lock into copy_or_ref
         return std::unique_lock<TS_Policy_Safe>(*const_cast<TS_Policy_Safe*>(this));
     }
 
-    inline auto scoped_lock(TS_Policy_Safe* other) const
+    auto scoped_lock(TS_Policy_Safe* other) const
     {
         return std::scoped_lock<TS_Policy_Safe, TS_Policy_Safe>(
             *const_cast<TS_Policy_Safe*>(this), *const_cast<TS_Policy_Safe*>(other));
     }
 
-    inline void lock() const
+    void lock() const
     {
         mutex.lock();
     }
 
-    inline bool try_lock() noexcept
+    bool try_lock() noexcept
     {
         return mutex.try_lock();
     }
 
-    inline void unlock() noexcept
+    void unlock() noexcept
     {
         mutex.unlock();
     }
 
-    protected:
+protected:
 
     TS_Policy_Safe() noexcept = default;
     ~TS_Policy_Safe() noexcept = default;
@@ -350,29 +345,29 @@ class TS_Policy_Safe
 
     using Weak_Ptr = std::weak_ptr<TS_Policy_Safe>;
 
-    inline Weak_Ptr weak_ptr() const
+    Weak_Ptr weak_ptr() const
     {
         return tracker;
     }
 
-    inline Shared_Ptr observed(Weak_Ptr const& observer) const
+    Shared_Ptr observed(Weak_Ptr const& observer) const
     {
         return std::move(observer.lock());
     }
 
-    inline Shared_Ptr visiting(Weak_Ptr const& observer) const
+    Shared_Ptr visiting(Weak_Ptr const& observer) const
     {
         // Lock the observer if the observer isn't tracker
         return observer.owner_before(tracker)
             || tracker.owner_before(observer) ? std::move(observer.lock()) : nullptr;
     }
 
-    inline auto unmask(Shared_Ptr& observer) const
+    auto unmask(Shared_Ptr& observer) const
     {
         return observer.get();
     }
 
-    inline void before_disconnect_all()
+    void before_disconnect_all()
     {
         // Immediately create a weak ptr so we can "ping" for expiration
         auto ping = weak_ptr();
